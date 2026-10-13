@@ -121,6 +121,7 @@ Failed password for user from 1.2.3.4
 password authentication failed
 psk=supersecretwifi
 psk="supersecretwifi"
+psk="wifi-secret" token=later-token-value
 token='quoted-token-value'
 password="secret with spaces"
 password_store="gnome-libsecret"
@@ -154,6 +155,8 @@ assert_contains "$redacted" "Failed password for user from 1.2.3.4" "an sshd fai
 assert_contains "$redacted" "password authentication failed" "a failure sentence stays"
 assert_contains "$redacted" "psk=[REDACTED]" "a Wi-Fi PSK is removed"
 assert_absent "$redacted" "supersecretwifi" "a quoted Wi-Fi PSK is removed"
+assert_absent "$redacted" "wifi-secret" "a quoted PSK beside another assignment is removed"
+assert_absent "$redacted" "later-token-value" "an unquoted token after a quoted assignment is removed"
 assert_contains "$redacted" "token=[REDACTED]" "a single-quoted token is removed"
 assert_absent "$redacted" "quoted-token-value" "a single-quoted token value is gone"
 assert_absent "$redacted" "secret with spaces" "a quoted password keeps its spaces inside the match"

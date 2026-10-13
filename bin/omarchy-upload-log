@@ -51,7 +51,14 @@ redact_into() {
         if (RLENGTH == 0) break
         piece = substr(s, RSTART, RLENGTH)
         piece2 = gensub(re, repl, 1, piece)
-        if (piece2 == piece) break
+        # Reason: psk=[REDACTED] still matches the assignment rule, and the
+        # replacement is identical. Stopping here would leave a later secret
+        # on the same line. Copy the match and keep scanning after it.
+        if (piece2 == piece) {
+          out = out substr(s, 1, RSTART + RLENGTH - 1)
+          s = substr(s, RSTART + RLENGTH)
+          continue
+        }
         out = out substr(s, 1, RSTART - 1) piece2
         s = substr(s, RSTART + RLENGTH)
         n++
