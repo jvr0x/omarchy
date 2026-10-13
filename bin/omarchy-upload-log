@@ -82,13 +82,19 @@ redact_into() {
       count = 0
       in_key = 0
       # Quoted keys from install configs and JSON, then assignment forms
-      # (journal command lines, nmcli, wg-quick). The value stops at a
-      # delimiter so the rest of the line stays readable.
+      # (journal command lines, nmcli, wg-quick). A quoted value includes
+      # backslash-escaped quotes, so the rest of that secret stays in the
+      # match. An unquoted value stops at a delimiter so the rest of the
+      # line stays readable.
       json_key = "\"!?(([A-Za-z0-9]+_)*)(password|passwd|psk|secret|token|api[-_]?key|private[-_]?key|client[-_]?secret)\""
-      json_re = "(" json_key ")[[:space:]]*:[[:space:]]*\"[^\"]*\""
+      json_re = "(" json_key ")[[:space:]]*:[[:space:]]*\"(\\\\.|[^\"\\\\])*\""
       sq_key = "'\''!?(([A-Za-z0-9]+_)*)(password|passwd|psk|secret|token|api[-_]?key|private[-_]?key|client[-_]?secret)'\''"
-      sq_re = "(" sq_key ")[[:space:]]*:[[:space:]]*'\''[^'\'']*'\''"
-      assign_re = "(^|[^A-Za-z0-9_])([A-Za-z0-9_.-]*(client[-_]?secret|private[-_]?key|preshared[-_]?key|auth[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|api[-_]?key|password|passwd|pwd|psk|secret|token))[[:space:]]*[=:][[:space:]]*[^[:space:]&\"'\'',;]+"
+      sq_re = "(" sq_key ")[[:space:]]*:[[:space:]]*'\''(\\\\.|[^\\'\''])*'\''"
+      assign_key = "[A-Za-z0-9_.-]*(client[-_]?secret|private[-_]?key|preshared[-_]?key|auth[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|api[-_]?key|password|passwd|pwd|psk|secret|token)"
+      assign_prefix = "(^|[^A-Za-z0-9_])(" assign_key ")"
+      dq_assign_re = assign_prefix "[[:space:]]*[=:][[:space:]]*\"(\\\\.|[^\"\\\\])*\""
+      sq_assign_re = assign_prefix "[[:space:]]*[=:][[:space:]]*'\''(\\\\.|[^\\'\''])*'\''"
+      assign_re = assign_prefix "[[:space:]]*[=:][[:space:]]*[^[:space:]&\"'\'',;]+"
       # Passed as strings. A /regexp/ argument is evaluated against $0 before
       # the function runs, so it arrives as 0 or 1 and then matches digits.
       url_re = "([A-Za-z][A-Za-z0-9+.-]*://)[^[:space:]/@:]+:[^[:space:]/@]+@"
@@ -122,6 +128,8 @@ redact_into() {
       line = apply(line, auth_re, "\\1: \\2 [REDACTED]")
       line = apply(line, json_re, "\\1: \"[REDACTED]\"")
       line = apply(line, sq_re, "\\1: '\''[REDACTED]'\''")
+      line = apply(line, dq_assign_re, "\\1\\2=[REDACTED]")
+      line = apply(line, sq_assign_re, "\\1\\2=[REDACTED]")
       line = apply(line, assign_re, "\\1\\2=[REDACTED]")
       line = apply(line, bearer_re, "Bearer [REDACTED]")
       line = scrub_tokens(line)
@@ -354,7 +362,13 @@ if ! removed=$(redact_into "$TEMP_LOG" "$redacted"); then
   rm -f "$redacted"
   exit 1
 fi
-mv -f "$redacted" "$TEMP_LOG"
+# Reason: curl posts TEMP_LOG. A failed rename would leave the scrubbed copy
+# aside and upload the original, while still reporting that values were removed.
+if ! mv -f "$redacted" "$TEMP_LOG"; then
+  rm -f "$redacted"
+  echo "Error: failed to replace the log with the redacted copy" >&2
+  exit 1
+fi
 chmod 600 "$TEMP_LOG"
 
 echo "Uploading ${upload_label} to logs.omarchy.org..."

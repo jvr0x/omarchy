@@ -115,9 +115,15 @@ Authorization: Basic dXNlcjpwYXNz
 "encryption_password": "luks-secret"
 "password_store": "gnome-libsecret"
 'password': 'archinstall-secret'
+"password": "a\"remaining-secret"
+'password': 'a\'tail-secret'
 Failed password for user from 1.2.3.4
 password authentication failed
 psk=supersecretwifi
+psk="supersecretwifi"
+token='quoted-token-value'
+password="secret with spaces"
+password_store="gnome-libsecret"
 PrivateKey = aGVsbG8td29ybGQtaGVsbG8td29ybGQtaGVsbG8td29y
 ghp_abcdefghijklmnopqrstuvwxyz123456
 npm_1234567890abcdef1234567890abcdef1234
@@ -142,9 +148,16 @@ assert_absent "$redacted" "disk-secret" "the install config password value is go
 assert_absent "$redacted" "luks-secret" "the disk encryption password value is gone"
 assert_contains "$redacted" '"password_store": "gnome-libsecret"' "a password-store setting is not a secret"
 assert_contains "$redacted" "'password': '[REDACTED]'" "an install-log password is removed"
+assert_absent "$redacted" "remaining-secret" "an escaped quote does not leave the rest of a JSON password"
+assert_absent "$redacted" "tail-secret" "an escaped quote does not leave the rest of a single-quoted password"
 assert_contains "$redacted" "Failed password for user from 1.2.3.4" "an sshd failure line stays"
 assert_contains "$redacted" "password authentication failed" "a failure sentence stays"
 assert_contains "$redacted" "psk=[REDACTED]" "a Wi-Fi PSK is removed"
+assert_absent "$redacted" "supersecretwifi" "a quoted Wi-Fi PSK is removed"
+assert_contains "$redacted" "token=[REDACTED]" "a single-quoted token is removed"
+assert_absent "$redacted" "quoted-token-value" "a single-quoted token value is gone"
+assert_absent "$redacted" "secret with spaces" "a quoted password keeps its spaces inside the match"
+assert_contains "$redacted" 'password_store="gnome-libsecret"' "a quoted password-store setting is not a secret"
 assert_contains "$redacted" "PrivateKey=[REDACTED]" "a WireGuard private key is removed"
 assert_absent "$redacted" "ghp_abcdefghijklmnopqrstuvwxyz123456" "a GitHub token is removed"
 assert_absent "$redacted" "npm_1234567890abcdef1234567890abcdef1234" "an npm token is removed"
@@ -201,6 +214,23 @@ run_upload last-boot >/dev/null
 [[ $(cat "$JOURNAL_ARGS") == "-b -1 -p warning --no-pager" ]] ||
   fail "last-boot asks journalctl for warnings and errors" "$(cat "$JOURNAL_ARGS")"
 pass "last-boot uses the same warning scope"
+
+cat >"$tmp/bin/mv" <<'EOF'
+#!/bin/bash
+printf '%s\n' "mv refused" >&2
+exit 1
+EOF
+chmod +x "$tmp/bin/mv"
+: >"$CURL_LOG"
+rm -f "$CURL_CAPTURE"
+if output=$(run_upload this-boot 2>&1); then
+  fail "a failed replacement does not upload" "$output"
+fi
+[[ -e $CURL_CAPTURE ]] && fail "a failed replacement does not post the log" "$(cat "$CURL_CAPTURE")"
+grep -q "failed to replace the log" <<<"$output" || fail "a failed replacement reports the error" "$output"
+grep -q "Removed" <<<"$output" && fail "a failed replacement does not claim values were removed" "$output" || true
+pass "a failed replacement does not upload the original log"
+rm -f "$tmp/bin/mv"
 
 # omarchy-debug writes a fixed path. Restore whatever was there on the way out.
 : >"$CURL_LOG"
