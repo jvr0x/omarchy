@@ -43,7 +43,9 @@ redact_into() {
   }
 
   count_file=$(mktemp)
-  if ! awk -v count_file="$count_file" '
+  # gensub() and IGNORECASE are gawk. Plain awk is mawk in the Ubuntu CLI suite,
+  # and mawk aborts the upload with "function gensub never defined".
+  if ! gawk -v count_file="$count_file" '
     function apply(s, re, repl,    out, piece, piece2, n) {
       out = ""
       n = 0
@@ -93,11 +95,13 @@ redact_into() {
       # backslash-escaped quotes, so the rest of that secret stays in the
       # match. An unquoted value stops at a delimiter so the rest of the
       # line stays readable.
-      json_key = "\"!?(([A-Za-z0-9]+_)*)(password|passwd|psk|secret|token|api[-_]?key|private[-_]?key|client[-_]?secret)\""
+      json_key = "\"!?(([A-Za-z0-9]+_)*)(password|passwd|pwd|psk|secret|token|api[-_]?key|private[-_]?key|client[-_]?secret)\""
       json_re = "(" json_key ")[[:space:]]*:[[:space:]]*\"(\\\\.|[^\"\\\\])*\""
-      sq_key = "'\''!?(([A-Za-z0-9]+_)*)(password|passwd|psk|secret|token|api[-_]?key|private[-_]?key|client[-_]?secret)'\''"
+      sq_key = "'\''!?(([A-Za-z0-9]+_)*)(password|passwd|pwd|psk|secret|token|api[-_]?key|private[-_]?key|client[-_]?secret)'\''"
       sq_re = "(" sq_key ")[[:space:]]*:[[:space:]]*'\''(\\\\.|[^\\'\''])*'\''"
-      assign_key = "[A-Za-z0-9_.-]*(client[-_]?secret|private[-_]?key|preshared[-_]?key|auth[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|api[-_]?key|password|passwd|pwd|psk|secret|token)"
+      # pwd is not an assignment key. IGNORECASE would treat sudo PWD=/home/...
+      # as a password and redact the working directory.
+      assign_key = "[A-Za-z0-9_.-]*(client[-_]?secret|private[-_]?key|preshared[-_]?key|auth[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|api[-_]?key|password|passwd|psk|secret|token)"
       assign_prefix = "(^|[^A-Za-z0-9_])(" assign_key ")"
       dq_assign_re = assign_prefix "[[:space:]]*[=:][[:space:]]*\"(\\\\.|[^\"\\\\])*\""
       sq_assign_re = assign_prefix "[[:space:]]*[=:][[:space:]]*'\''(\\\\.|[^\\'\''])*'\''"

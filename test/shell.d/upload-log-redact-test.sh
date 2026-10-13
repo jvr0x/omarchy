@@ -8,6 +8,8 @@ set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/base-test.sh"
 
+require_command gawk
+
 tmp=$(mktemp -d)
 debug_log=/tmp/omarchy-debug.log
 debug_backup=$(mktemp)
@@ -119,6 +121,8 @@ Authorization: Basic dXNlcjpwYXNz
 'password': 'a\'tail-secret'
 Failed password for user from 1.2.3.4
 password authentication failed
+sudo: justin : PWD=/home/justin ; USER=root ; COMMAND=/usr/bin/true
+"pwd": "quoted-pwd-secret"
 psk=supersecretwifi
 psk="supersecretwifi"
 psk="wifi-secret" token=later-token-value
@@ -153,6 +157,9 @@ assert_absent "$redacted" "remaining-secret" "an escaped quote does not leave th
 assert_absent "$redacted" "tail-secret" "an escaped quote does not leave the rest of a single-quoted password"
 assert_contains "$redacted" "Failed password for user from 1.2.3.4" "an sshd failure line stays"
 assert_contains "$redacted" "password authentication failed" "a failure sentence stays"
+assert_contains "$redacted" "PWD=/home/justin ; USER=root ; COMMAND=/usr/bin/true" "a sudo working directory is not a password"
+assert_contains "$redacted" '"pwd": "[REDACTED]"' "a quoted pwd key is removed"
+assert_absent "$redacted" "quoted-pwd-secret" "a quoted pwd value is gone"
 assert_contains "$redacted" "psk=[REDACTED]" "a Wi-Fi PSK is removed"
 assert_absent "$redacted" "supersecretwifi" "a quoted Wi-Fi PSK is removed"
 assert_absent "$redacted" "wifi-secret" "a quoted PSK beside another assignment is removed"
